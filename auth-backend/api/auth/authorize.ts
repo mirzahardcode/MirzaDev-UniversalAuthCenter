@@ -1,15 +1,15 @@
-import { getAppConfig } from "../../src/config/apps";
+import { getAppConfig } from "../../src/config/apps.js";
 import {
     AuthorizationUnavailableError,
     InvalidFirebaseTokenError,
     verifyFirebaseIdToken,
-} from "../../src/firebase/admin";
-import { authorizeUser } from "../../src/services/AuthorizationService";
+} from "../../src/firebase/admin.js";
+import { authorizeUser } from "../../src/services/AuthorizationService.js";
 import {
     sendResponse,
     VercelRequest,
     VercelResponse,
-} from "../../src/utils/response";
+} from "../../src/utils/response.js";
 
 function readAppKey(body: unknown): string | null {
     let parsedBody = body;

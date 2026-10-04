@@ -1,9 +1,9 @@
 import { getDatabase } from "firebase-admin/database";
-import { getAppConfig } from "../config/apps";
+import { getAppConfig } from "../config/apps.js";
 import {
     AuthorizationUnavailableError,
     getFirebaseAdminApp,
-} from "../firebase/admin";
+} from "../firebase/admin.js";
 
 export type AuthorizationDenialStatus =
     | "UNKNOWN_APP"
