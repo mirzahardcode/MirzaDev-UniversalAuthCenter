@@ -2,6 +2,7 @@
   "name": "universal-auth-center-backend",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
