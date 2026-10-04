@@ -19,7 +19,7 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Virtual machine crash logs
 hs_err_pid*
 replay_pid*
 
@@ -28,11 +28,17 @@ build/generated/
 build/classes/
 out/
 node_modules/
+.vscode/
 
 # Local credentials
 .env
 .env.*
 !**/.env.example
+**/*credential*.json
+**/*credentials*.json
 **/serviceAccountKey.json
 **/*service-account*.json
 **/*firebase-adminsdk*.json
+*.pem
+*.p12
+*.pfx
