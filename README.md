@@ -276,6 +276,14 @@ Backend kemudian:
 
 UID, email, `active`, dan `expiresAt` dari request client tidak dipercaya.
 
+Untuk memeriksa source backend secara lokal, gunakan Node.js `24.x`:
+
+```powershell
+cd auth-backend
+npm ci
+npm run typecheck
+```
+
 ## Firebase
 
 Struktur authorization yang digunakan:

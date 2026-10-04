@@ -36,7 +36,7 @@ public final class AuthCenter {
                 activity,
                 AuthConfig.fromActivity(
                         activity,
-                        null,
+                        GeneratedConfig.FIREBASE_API_KEY,
                         GeneratedConfig.APP_KEY
                 ),
                 null

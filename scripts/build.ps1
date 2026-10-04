@@ -31,15 +31,20 @@ if (!(Test-Path $AppProperties)) {
 
 $appConfig = Get-Content $AppProperties -Raw
 $appKey = $null
+$firebaseApiKey = $null
 foreach ($line in ($appConfig -split "`r?`n")) {
     if ($line -match "^\s*appKey\s*=") {
         $appKey = ($line -split "=", 2)[1].Trim()
-        break
+    } elseif ($line -match "^\s*firebaseApiKey\s*=") {
+        $firebaseApiKey = ($line -split "=", 2)[1].Trim()
     }
 }
 
 if ([string]::IsNullOrWhiteSpace($appKey)) {
     throw "appKey is missing or empty in $AppProperties"
+}
+if ([string]::IsNullOrWhiteSpace($firebaseApiKey)) {
+    throw "firebaseApiKey is missing or empty in $AppProperties"
 }
 
 Remove-Item $GeneratedDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -59,6 +64,7 @@ package com.universal.authcenter;
 
 final class GeneratedConfig {
     static final String APP_KEY = "$appKey";
+    static final String FIREBASE_API_KEY = "$firebaseApiKey";
 }
 "@
 [System.IO.File]::WriteAllText(
