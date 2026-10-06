@@ -5,13 +5,14 @@ import {
     verifyFirebaseIdToken,
 } from "../../src/firebase/admin.js";
 import { authorizeUser } from "../../src/services/AuthorizationService.js";
+import { normalizeDeviceId } from "../../src/utils/deviceId.js";
 import {
     sendResponse,
     VercelRequest,
     VercelResponse,
 } from "../../src/utils/response.js";
 
-function readAppKey(body: unknown): string | null {
+function readRequestBody(body: unknown): Record<string, unknown> | null {
     let parsedBody = body;
     if (typeof body === "string") {
         try {
@@ -25,17 +26,40 @@ function readAppKey(body: unknown): string | null {
         return null;
     }
 
-    const appKey = (parsedBody as Record<string, unknown>).appKey;
+    return parsedBody as Record<string, unknown>;
+}
+
+function readAppKey(body: unknown): string | null {
+    const parsedBody = readRequestBody(body);
+    if (!parsedBody) {
+        return null;
+    }
+
+    const appKey = parsedBody.appKey;
     return typeof appKey === "string" && appKey.trim().length > 0
         ? appKey.trim()
         : null;
+}
+
+function readDeviceId(body: unknown): string | null | undefined {
+    const parsedBody = readRequestBody(body);
+    if (!parsedBody || !Object.prototype.hasOwnProperty.call(parsedBody, "deviceId")) {
+        return undefined;
+    }
+
+    const rawDeviceId = parsedBody.deviceId;
+    if (rawDeviceId === null || rawDeviceId === undefined) {
+        return null;
+    }
+
+    return normalizeDeviceId(rawDeviceId);
 }
 
 function readBearerToken(request: VercelRequest): string | null {
     const header = request.headers.authorization;
     const value = Array.isArray(header) ? header[0] : header;
     const match = typeof value === "string"
-        ? /^Bearer\s+(\S+)$/i.exec(value.trim())
+        ? /^Bearer\s+(\S+)$/.exec(value.trim())
         : null;
     return match ? match[1] : null;
 }
@@ -89,8 +113,28 @@ export default async function handler(
         return;
     }
 
+    const deviceId = readDeviceId(request.body);
+    const bindingMode = process.env.DEVICE_BINDING_MODE?.trim().toLowerCase();
+
+    if (bindingMode !== "off") {
+        if (deviceId === null) {
+            sendResponse(response, 400, "BAD_REQUEST", "A valid deviceId is required");
+            return;
+        }
+
+        if (deviceId === undefined && bindingMode !== "optional") {
+            sendResponse(response, 400, "BAD_REQUEST", "A valid deviceId is required");
+            return;
+        }
+    }
+
     try {
-        const decision = await authorizeUser(uid, appKey);
+        const decision = await authorizeUser(
+            uid,
+            appKey,
+            deviceId === undefined ? null : deviceId,
+        );
+
         if (decision.authorized) {
             sendResponse(response, 200, "AUTHORIZED", "Access granted");
             return;
