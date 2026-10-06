@@ -4,7 +4,11 @@ import {
     AuthorizationUnavailableError,
     getFirebaseAdminApp,
 } from "../firebase/admin.js";
-import { hashDeviceId } from "../utils/deviceId.js";
+import {
+    hashDeviceId,
+    isHashedDeviceId,
+    normalizeDeviceId,
+} from "../utils/deviceId.js";
 
 export type AuthorizationDenialStatus =
     | "UNKNOWN_APP"
@@ -19,6 +23,11 @@ export type AuthorizationDecision =
 
 type DeviceBindingMode = "off" | "optional" | "enforce";
 type UserRecord = Record<string, unknown>;
+type BindingState =
+    | "UNBOUND"
+    | "BOUND_HASH"
+    | "BOUND_LEGACY"
+    | "INCONSISTENT";
 
 function getDeviceBindingMode(): DeviceBindingMode {
     const configured = process.env.DEVICE_BINDING_MODE?.trim().toLowerCase();
@@ -43,19 +52,21 @@ function isUnexpiredUser(user: UserRecord): boolean {
         && expiresAt > Date.now();
 }
 
-function classifyBindingState(
-    user: UserRecord,
-): "UNBOUND" | "BOUND" | "INCONSISTENT" {
+function classifyBindingState(user: UserRecord): BindingState {
     const deviceBound = user.deviceBound;
     const deviceId = user.deviceId;
-    const hasDeviceId = typeof deviceId === "string" && deviceId.trim().length > 0;
+    const hasStoredDeviceId = typeof deviceId === "string" && deviceId.trim().length > 0;
 
-    if (deviceBound === true && hasDeviceId) {
-        return "BOUND";
+    if (deviceBound === true && isHashedDeviceId(deviceId)) {
+        return "BOUND_HASH";
+    }
+
+    if (deviceBound === true && normalizeDeviceId(deviceId) !== null) {
+        return "BOUND_LEGACY";
     }
 
     if ((deviceBound === false || deviceBound === undefined || deviceBound === null)
-            && (!hasDeviceId || deviceId === "")) {
+            && !hasStoredDeviceId) {
         return "UNBOUND";
     }
 
@@ -127,17 +138,32 @@ export async function authorizeUser(
             }
 
             const currentBindingState = classifyBindingState(current);
-            if (currentBindingState === "BOUND") {
-                return currentValue;
-            }
 
-            const now = Date.now();
-            return {
-                ...current,
-                deviceId: requestedDeviceHash,
-                deviceBound: true,
-                deviceBoundAt: now,
-            };
+            switch (currentBindingState) {
+                case "BOUND_HASH":
+                case "INCONSISTENT":
+                    return currentValue;
+
+                case "BOUND_LEGACY": {
+                    const legacyDeviceId = normalizeDeviceId(current.deviceId);
+                    if (legacyDeviceId !== deviceId) {
+                        return currentValue;
+                    }
+
+                    return {
+                        ...current,
+                        deviceId: requestedDeviceHash,
+                    };
+                }
+
+                case "UNBOUND":
+                    return {
+                        ...current,
+                        deviceId: requestedDeviceHash,
+                        deviceBound: true,
+                        deviceBoundAt: Date.now(),
+                    };
+            }
         });
 
         const finalUser = transaction.snapshot.val() as UserRecord | null;
@@ -150,9 +176,20 @@ export async function authorizeUser(
         }
 
         const finalState = classifyBindingState(finalUser);
-        if (finalState === "BOUND") {
+
+        if (finalState === "BOUND_HASH") {
             return finalUser.deviceId === requestedDeviceHash
                 ? { authorized: true }
+                : { authorized: false, status: "DEVICE_REJECTED" };
+        }
+
+        if (finalState === "BOUND_LEGACY") {
+            const legacyDeviceId = normalizeDeviceId(finalUser.deviceId);
+
+            return legacyDeviceId === deviceId
+                ? (() => {
+                    throw new AuthorizationUnavailableError();
+                })()
                 : { authorized: false, status: "DEVICE_REJECTED" };
         }
 
