@@ -113,8 +113,8 @@ export default async function handler(
         return;
     }
 
-    const deviceId = readDeviceId(request.body);
     const bindingMode = process.env.DEVICE_BINDING_MODE?.trim().toLowerCase();
+    const deviceId = bindingMode === "off" ? undefined : readDeviceId(request.body);
 
     if (bindingMode !== "off") {
         if (deviceId === null) {
