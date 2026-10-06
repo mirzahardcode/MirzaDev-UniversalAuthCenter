@@ -13,6 +13,7 @@ import java.net.URL;
 public final class AuthorizationClient {
 
     private static final int TIMEOUT_MILLIS = 15000;
+    private static final String DEVICE_REJECTED = "DEVICE_REJECTED";
 
     private final String backendUrl;
 
@@ -26,22 +27,37 @@ public final class AuthorizationClient {
                 : backendUrl;
     }
 
-    public AuthorizationResponse authorize(String appKey, String idToken)
-            throws IOException, AuthorizationException {
+    public AuthorizationResponse authorize(
+            String appKey,
+            String idToken,
+            String deviceId
+    ) throws IOException, AuthorizationException {
         if (isBlank(appKey)) {
-            throw new AuthorizationException(false, "Application key is required");
+            throw new AuthorizationException(false, null, "Application key is required");
         }
         if (isBlank(idToken)) {
-            throw new AuthorizationException(false, "Firebase ID token is required");
+            throw new AuthorizationException(false, null, "Firebase ID token is required");
+        }
+        if (isBlank(deviceId)) {
+            throw new AuthorizationException(
+                    false,
+                    "DEVICE_REJECTED",
+                    "Device identity is unavailable"
+            );
         }
 
         String requestBody;
         try {
             requestBody = new JSONObject()
                     .put("appKey", appKey)
+                    .put("deviceId", deviceId)
                     .toString();
         } catch (JSONException exception) {
-            throw new AuthorizationException(false, "Invalid authorization request");
+            throw new AuthorizationException(
+                    false,
+                    null,
+                    "Invalid authorization request"
+            );
         }
 
         HttpURLConnection connection = null;
@@ -69,16 +85,35 @@ public final class AuthorizationClient {
             }
 
             String payload = readResponse(connection.getErrorStream());
-            if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED
-                    || responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
+
+            if (responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
+                String status = extractStatus(payload);
+                if (DEVICE_REJECTED.equals(status)) {
+                    throw new AuthorizationException(
+                            true,
+                            status,
+                            extractMessage(payload, "Device is rejected")
+                    );
+                }
+
                 throw new AuthorizationException(
-                        false,
+                        true,
+                        status,
                         extractMessage(payload, "Access denied")
                 );
             }
 
+            if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                throw new AuthorizationException(
+                        false,
+                        extractStatus(payload),
+                        extractMessage(payload, "Authentication is required")
+                );
+            }
+
             throw new AuthorizationException(
-                    true,
+                    false,
+                    null,
                     extractMessage(payload, "Authorization request failed")
             );
         } finally {
@@ -94,7 +129,11 @@ public final class AuthorizationClient {
             JSONObject response = new JSONObject(responseBody);
             String status = response.optString("status", "");
             if (!"AUTHORIZED".equals(status)) {
-                throw new AuthorizationException(false, "Invalid authorization response");
+                throw new AuthorizationException(
+                        false,
+                        status,
+                        "Invalid authorization response"
+                );
             }
             String message = response.optString(
                     "message",
@@ -107,7 +146,11 @@ public final class AuthorizationClient {
 
             return new AuthorizationResponse(true, null, message);
         } catch (JSONException exception) {
-            throw new AuthorizationException(true, "Invalid authorization response");
+            throw new AuthorizationException(
+                    false,
+                    null,
+                    "Invalid authorization response"
+            );
         }
     }
 
@@ -131,6 +174,20 @@ public final class AuthorizationClient {
         }
 
         return responseBody;
+    }
+
+    private static String extractStatus(String responseBody) {
+        if (isBlank(responseBody)) {
+            return null;
+        }
+
+        try {
+            JSONObject response = new JSONObject(responseBody);
+            String status = response.optString("status", "");
+            return isBlank(status) ? null : status;
+        } catch (JSONException ignored) {
+            return null;
+        }
     }
 
     private static String readResponse(InputStream inputStream) throws IOException {
@@ -181,14 +238,29 @@ public final class AuthorizationClient {
     public static final class AuthorizationException extends Exception {
 
         private final boolean accessDenied;
+        private final String status;
 
         public AuthorizationException(boolean accessDenied, String message) {
+            this(accessDenied, null, message);
+        }
+
+        public AuthorizationException(
+                boolean accessDenied,
+                String status,
+                String message
+        ) {
             super(message);
             this.accessDenied = accessDenied;
+            this.status = status;
         }
 
         public boolean isAccessDenied() {
             return accessDenied;
+        }
+
+        /** @return the backend status, or {@code null} when unavailable */
+        public String getStatus() {
+            return status;
         }
     }
 }
