@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 
 const DEVICE_ID_PATTERN = /^[0-9a-f]{16}$/;
 const ZERO_DEVICE_ID = "0000000000000000";
+const HASHED_DEVICE_ID_PATTERN = /^v1:[0-9a-f]{64}$/;
 const HASH_VERSION = "v1";
 
 export function normalizeDeviceId(value: unknown): string | null {
@@ -15,6 +16,10 @@ export function normalizeDeviceId(value: unknown): string | null {
     }
 
     return normalized;
+}
+
+export function isHashedDeviceId(value: unknown): value is string {
+    return typeof value === "string" && HASHED_DEVICE_ID_PATTERN.test(value);
 }
 
 export function hashDeviceId(deviceId: string): string {
