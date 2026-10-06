@@ -8,6 +8,7 @@ import android.util.Log;
 
 import com.universal.authcenter.auth.AuthState;
 import com.universal.authcenter.auth.AuthorizationClient;
+import com.universal.authcenter.auth.DeviceIdentity;
 import com.universal.authcenter.auth.FirebaseAuthClient;
 import com.universal.authcenter.auth.SessionManager;
 import com.universal.authcenter.ui.LoginDialog;
@@ -19,6 +20,7 @@ import java.util.concurrent.Executors;
 public final class AuthCenter {
 
     private static final String TAG = "AuthCenter";
+    private static final String STATUS_DEVICE_REJECTED = "DEVICE_REJECTED";
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static final ExecutorService AUTH_EXECUTOR =
             Executors.newSingleThreadExecutor();
@@ -78,16 +80,6 @@ public final class AuthCenter {
             );
             AuthState state = sessionManager.getState();
             Log.d(TAG, "Identity authenticated: " + state.hasAuthenticatedSession());
-
-            if (state.isReady()) {
-                if (callback != null) {
-                    callback.onAuthorized(new AuthResult(
-                            AuthResult.Status.AUTHORIZED,
-                            "Session already authorized"
-                    ));
-                }
-                return;
-            }
 
             if (!state.hasAuthenticatedSession()
                     || state.getAuthenticationStatus() == AuthState.AuthenticationStatus.SESSION_EXPIRED
@@ -180,6 +172,15 @@ public final class AuthCenter {
                 return;
             }
 
+            String deviceId = DeviceIdentity.get(context);
+            if (isBlank(deviceId)) {
+                callback.onError(new AuthResult(
+                        AuthResult.Status.ERROR,
+                        "Device identity is unavailable"
+                ));
+                return;
+            }
+
             AuthorizationClient client = new AuthorizationClient(
                     config.getBackendUrl()
             );
@@ -187,6 +188,7 @@ public final class AuthCenter {
                     sessionManager,
                     config.getAppKey(),
                     sessionManager.getTokenManager().getIdToken(),
+                    deviceId,
                     client,
                     callback
             ));
@@ -261,12 +263,13 @@ public final class AuthCenter {
             SessionManager sessionManager,
             String appKey,
             String idToken,
+            String deviceId,
             AuthorizationClient authorizationClient,
             AuthCallback callback
     ) {
         try {
             AuthorizationClient.AuthorizationResponse response =
-                    authorizationClient.authorize(appKey, idToken);
+                    authorizationClient.authorize(appKey, idToken, deviceId);
 
             if (response.isAuthorized()) {
                 sessionManager.markAuthorized();
@@ -283,25 +286,38 @@ public final class AuthCenter {
                     response.getMessage()
             )));
         } catch (AuthorizationClient.AuthorizationException exception) {
-            try {
-                sessionManager.markAccessDenied();
-            } catch (RuntimeException ignored) {
-                // The session may already be in a terminal state.
+            if (STATUS_DEVICE_REJECTED.equals(exception.getStatus())) {
+                try {
+                    sessionManager.markDeviceRejected();
+                } catch (RuntimeException ignored) {
+                    // The session may already be in a terminal state.
+                }
+
+                MAIN_HANDLER.post(() -> callback.onDenied(new AuthResult(
+                        AuthResult.Status.DEVICE_REJECTED,
+                        exception.getMessage()
+                )));
+                return;
             }
 
-            MAIN_HANDLER.post(() -> {
-                if (exception.isAccessDenied()) {
-                    callback.onDenied(new AuthResult(
-                            AuthResult.Status.DENIED,
-                            exception.getMessage()
-                    ));
-                } else {
-                    callback.onError(new AuthResult(
-                            AuthResult.Status.ERROR,
-                            exception.getMessage()
-                    ));
+            if (exception.isAccessDenied()) {
+                try {
+                    sessionManager.markAccessDenied();
+                } catch (RuntimeException ignored) {
+                    // The session may already be in a terminal state.
                 }
-            });
+
+                MAIN_HANDLER.post(() -> callback.onDenied(new AuthResult(
+                        AuthResult.Status.DENIED,
+                        exception.getMessage()
+                )));
+                return;
+            }
+
+            MAIN_HANDLER.post(() -> callback.onError(new AuthResult(
+                    AuthResult.Status.ERROR,
+                    exception.getMessage()
+            )));
         } catch (IOException exception) {
             MAIN_HANDLER.post(() -> callback.onError(new AuthResult(
                     AuthResult.Status.ERROR,

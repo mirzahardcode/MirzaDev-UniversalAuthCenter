@@ -5,7 +5,8 @@ public final class AuthResult {
     public enum Status {
         AUTHORIZED,
         DENIED,
-        ERROR
+        ERROR,
+        DEVICE_REJECTED
     }
 
     private final Status status;
