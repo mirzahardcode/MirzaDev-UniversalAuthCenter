@@ -1,5 +1,7 @@
-import { App, cert, getApps, initializeApp } from "firebase-admin/app";
-import { DecodedIdToken, getAuth } from "firebase-admin/auth";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import type { App } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import type { DecodedIdToken } from "firebase-admin/auth";
 
 export class AuthorizationUnavailableError extends Error {
     constructor() {

@@ -7,7 +7,10 @@
     "node": "24.x"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./tests/ts-resolve.mjs --test tests/**/*.test.ts",
+    "migrate:dry-run": "node --import ./tests/ts-resolve.mjs scripts/migrate-appaccess.ts --dry-run",
+    "migrate:apply": "node --import ./tests/ts-resolve.mjs scripts/migrate-appaccess.ts --apply"
   },
   "dependencies": {
     "firebase-admin": "^14.5.0"
