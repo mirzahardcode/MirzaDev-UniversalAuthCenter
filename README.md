@@ -36,6 +36,21 @@ lanjut ke aplikasi
 
 Jadi authentication dan authorization dipisahkan.
 
+## Temporary Auth Debug panel
+
+Saat `AuthDebugConfig.ENABLED` bernilai `true`, tombol `>_` di kanan atas
+login dialog membuka panel diagnostik yang mengikuti tahapan autentikasi
+aktual. Panel dapat ditutup dan dibuka kembali selama dialog login masih ada.
+
+Data diagnostik dibatasi pada konfigurasi yang disanitasi, status session dan
+token tanpa nilainya, status response HTTP/backend, waktu, serta kategori
+error. Token, password, UID penuh, Android ID, device hash, header
+authorization, dan body request/response tidak ditampilkan.
+
+Fitur ini hanya untuk investigasi sementara. Sebelum membuat release, ubah
+`AuthDebugConfig.ENABLED` menjadi `false`, lalu build ulang. Tombol dan
+instrumentasi debug akan dinonaktifkan.
+
 **Authentication** menjawab:
 
 > "Siapa user ini?"
@@ -76,6 +91,9 @@ MirzaDev-UniversalAuthCenter/
 │       ├── AuthCallback.java
 │       ├── AuthResult.java
 │       ├── AuthenticationCallback.java
+│       ├── AuthDebug.java
+│       ├── AuthDebugConfig.java
+│       ├── AuthDebugSnapshot.java
 │       │
 │       ├── auth/
 │       │   ├── AuthState.java
@@ -85,6 +103,7 @@ MirzaDev-UniversalAuthCenter/
 │       │   └── TokenManager.java
 │       │
 │       └── ui/
+│           ├── AuthDebugDialog.java
 │           └── LoginDialog.java
 │
 ├── auth-backend/

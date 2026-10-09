@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -16,6 +17,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -24,10 +26,11 @@ import android.widget.TextView;
 import java.lang.ref.WeakReference;
 
 import com.universal.authcenter.AuthCallback;
+import com.universal.authcenter.AuthCenter;
 import com.universal.authcenter.AuthConfig;
+import com.universal.authcenter.AuthDebugConfig;
 import com.universal.authcenter.AuthResult;
 import com.universal.authcenter.AuthenticationCallback;
-import com.universal.authcenter.AuthCenter;
 
 public final class LoginDialog extends Dialog {
 
@@ -42,6 +45,7 @@ public final class LoginDialog extends Dialog {
     private Button submitButton;
     private TextView statusView;
     private ProgressBar loadingView;
+    private AuthDebugDialog authDebugDialog;
     private boolean cleanedUp;
 
     public LoginDialog(Activity activity, AuthConfig config, AuthCallback callback) {
@@ -166,7 +170,17 @@ public final class LoginDialog extends Dialog {
         titleView.setTextColor(Color.DKGRAY);
         titleView.setGravity(Gravity.CENTER);
         titleView.setPadding(0, 0, 0, dpToPx(8));
-        root.addView(titleView, matchParentWrapContentParams());
+
+        FrameLayout titleBar = new FrameLayout(getContext());
+        titleBar.addView(titleView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+        ));
+        if (AuthDebugConfig.ENABLED) {
+            titleBar.addView(createDebugButton(), debugButtonParams());
+        }
+        root.addView(titleBar, matchParentWrapContentParams());
 
         TextView subtitleView = new TextView(getContext());
         subtitleView.setText("Sign in to continue");
@@ -451,6 +465,47 @@ public final class LoginDialog extends Dialog {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
+    }
+
+    /**
+     * TEMPORARY DEBUG — small {@code ">_" } affordance shown only while the
+     * feature gate is enabled. It opens the read-only AUTH DEBUG panel and has
+     * no effect on the login flow.
+     */
+    private TextView createDebugButton() {
+        TextView debugButton = new TextView(getContext());
+        debugButton.setText(">_");
+        debugButton.setTextSize(14f);
+        debugButton.setTypeface(Typeface.MONOSPACE);
+        debugButton.setTextColor(Color.GRAY);
+        debugButton.setPadding(dpToPx(12), dpToPx(4), dpToPx(12), dpToPx(4));
+        debugButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                openDebugPanel();
+            }
+        });
+        return debugButton;
+    }
+
+    private FrameLayout.LayoutParams debugButtonParams() {
+        return new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.RIGHT
+        );
+    }
+
+    private void openDebugPanel() {
+        if (!AuthDebugConfig.ENABLED) {
+            return;
+        }
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing()) {
+            return;
+        }
+        authDebugDialog = new AuthDebugDialog(activity);
+        authDebugDialog.show();
     }
 
     private int dpToPx(int dp) {

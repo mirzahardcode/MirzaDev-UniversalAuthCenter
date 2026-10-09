@@ -61,6 +61,8 @@ public final class AuthorizationClient {
         }
 
         HttpURLConnection connection = null;
+        String payload = null;
+        boolean bodyAvailable = false;
         try {
             URL url = new URL(backendUrl + "/api/auth/authorize");
             connection = (HttpURLConnection) url.openConnection();
@@ -81,10 +83,12 @@ public final class AuthorizationClient {
 
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                return parseResponse(readResponse(connection.getInputStream()));
+                String successBody = readResponse(connection.getInputStream());
+                return parseResponse(successBody, responseCode);
             }
 
-            String payload = readResponse(connection.getErrorStream());
+            payload = readResponse(connection.getErrorStream());
+            bodyAvailable = !isBlank(payload);
 
             if (responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
                 String status = extractStatus(payload);
@@ -92,14 +96,20 @@ public final class AuthorizationClient {
                     throw new AuthorizationException(
                             true,
                             status,
-                            extractMessage(payload, "Device is rejected")
+                            extractMessage(payload, "Device is rejected"),
+                            responseCode,
+                            bodyAvailable,
+                            false
                     );
                 }
 
                 throw new AuthorizationException(
                         true,
                         status,
-                        extractMessage(payload, "Access denied")
+                        extractMessage(payload, "Access denied"),
+                        responseCode,
+                        bodyAvailable,
+                        false
                 );
             }
 
@@ -107,14 +117,20 @@ public final class AuthorizationClient {
                 throw new AuthorizationException(
                         false,
                         extractStatus(payload),
-                        extractMessage(payload, "Authentication is required")
+                        extractMessage(payload, "Authentication is required"),
+                        responseCode,
+                        bodyAvailable,
+                        false
                 );
             }
 
             throw new AuthorizationException(
                     false,
-                    null,
-                    extractMessage(payload, "Authorization request failed")
+                    extractStatus(payload),
+                    extractMessage(payload, "Authorization request failed"),
+                    responseCode,
+                    bodyAvailable,
+                    false
             );
         } finally {
             if (connection != null) {
@@ -123,8 +139,10 @@ public final class AuthorizationClient {
         }
     }
 
-    private static AuthorizationResponse parseResponse(String responseBody)
-            throws AuthorizationException {
+    private static AuthorizationResponse parseResponse(
+            String responseBody,
+            int httpStatus
+    ) throws AuthorizationException {
         try {
             JSONObject response = new JSONObject(responseBody);
             String status = response.optString("status", "");
@@ -132,7 +150,10 @@ public final class AuthorizationClient {
                 throw new AuthorizationException(
                         false,
                         status,
-                        "Invalid authorization response"
+                        "Invalid authorization response",
+                        httpStatus,
+                        true,
+                        false
                 );
             }
             String message = response.optString(
@@ -144,12 +165,15 @@ public final class AuthorizationClient {
                 message = "Access granted";
             }
 
-            return new AuthorizationResponse(true, null, message);
+            return new AuthorizationResponse(true, status, message);
         } catch (JSONException exception) {
             throw new AuthorizationException(
                     false,
                     null,
-                    "Invalid authorization response"
+                    "Invalid authorization response",
+                    httpStatus,
+                    true,
+                    true
             );
         }
     }
@@ -213,17 +237,33 @@ public final class AuthorizationClient {
     public static final class AuthorizationResponse {
 
         private final boolean authorized;
+        private final String status;
         private final String uid;
         private final String message;
 
         public AuthorizationResponse(boolean authorized, String uid, String message) {
+            this(authorized, null, uid, message);
+        }
+
+        public AuthorizationResponse(
+                boolean authorized,
+                String status,
+                String uid,
+                String message
+        ) {
             this.authorized = authorized;
+            this.status = status;
             this.uid = uid;
             this.message = message;
         }
 
         public boolean isAuthorized() {
             return authorized;
+        }
+
+        /** @return the backend application status, or {@code null} when unavailable */
+        public String getStatus() {
+            return status;
         }
 
         public String getUid() {
@@ -239,6 +279,9 @@ public final class AuthorizationClient {
 
         private final boolean accessDenied;
         private final String status;
+        private final int httpStatus;
+        private final boolean bodyUnavailable;
+        private final boolean parsingError;
 
         public AuthorizationException(boolean accessDenied, String message) {
             this(accessDenied, null, message);
@@ -249,9 +292,23 @@ public final class AuthorizationClient {
                 String status,
                 String message
         ) {
+            this(accessDenied, status, message, 0, true, false);
+        }
+
+        public AuthorizationException(
+                boolean accessDenied,
+                String status,
+                String message,
+                int httpStatus,
+                boolean bodyAvailable,
+                boolean parsingError
+        ) {
             super(message);
             this.accessDenied = accessDenied;
             this.status = status;
+            this.httpStatus = httpStatus;
+            this.bodyUnavailable = !bodyAvailable;
+            this.parsingError = parsingError;
         }
 
         public boolean isAccessDenied() {
@@ -261,6 +318,21 @@ public final class AuthorizationClient {
         /** @return the backend status, or {@code null} when unavailable */
         public String getStatus() {
             return status;
+        }
+
+        /** @return the HTTP status code, or {@code 0} when the call never completed */
+        public int getHttpStatus() {
+            return httpStatus;
+        }
+
+        /** @return {@code true} when no response body was available to read */
+        public boolean isBodyUnavailable() {
+            return bodyUnavailable;
+        }
+
+        /** @return {@code true} when the response body could not be parsed */
+        public boolean isParsingError() {
+            return parsingError;
         }
     }
 }

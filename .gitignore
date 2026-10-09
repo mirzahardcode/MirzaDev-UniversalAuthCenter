@@ -42,3 +42,5 @@ node_modules/
 *.pem
 *.p12
 *.pfx
+.vercel
+.env*
