@@ -3,13 +3,20 @@ package com.universal.authcenter.auth;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public final class SessionManager {
 
     private static final String PREFERENCES_PREFIX = "universal_auth_center_session_";
     private static final String KEY_AUTHENTICATION_STATUS = "authentication_status";
     private static final String KEY_AUTHORIZATION_STATUS = "authorization_status";
     private static final String KEY_USER_ID = "user_id";
+    private static final Object PROCESS_SESSION_LOCK = new Object();
+    private static final Map<String, AuthState.AuthenticationStatus> PROCESS_SESSIONS =
+            new HashMap<String, AuthState.AuthenticationStatus>();
 
+    private final String appId;
     private final SharedPreferences preferences;
     private final TokenManager tokenManager;
 
@@ -20,6 +27,7 @@ public final class SessionManager {
         if (appId == null || appId.trim().isEmpty()) {
             throw new IllegalArgumentException("App ID must not be blank");
         }
+        this.appId = appId;
 
         Context applicationContext = context.getApplicationContext();
         Context storageContext = applicationContext != null
@@ -33,19 +41,28 @@ public final class SessionManager {
     }
 
     public synchronized AuthState getState() {
+        synchronized (PROCESS_SESSION_LOCK) {
+            return getStateLocked();
+        }
+    }
+
+    private AuthState getStateLocked() {
         AuthState.AuthenticationStatus authenticationStatus =
                 readAuthenticationStatus();
         AuthState.AuthorizationStatus authorizationStatus =
                 readAuthorizationStatus();
 
+        if ((authenticationStatus == AuthState.AuthenticationStatus.AUTHENTICATED
+                || authenticationStatus == AuthState.AuthenticationStatus.AUTHENTICATING)
+                && !isProcessAuthenticationActive(authenticationStatus)) {
+            clearSession(AuthState.AuthenticationStatus.SESSION_EXPIRED);
+            authenticationStatus = AuthState.AuthenticationStatus.SESSION_EXPIRED;
+            authorizationStatus = AuthState.AuthorizationStatus.NOT_CHECKED;
+        }
+
         if (authenticationStatus == AuthState.AuthenticationStatus.AUTHENTICATED
                 && !tokenManager.hasValidIdToken()) {
-            tokenManager.clear();
-            persistState(
-                    AuthState.AuthenticationStatus.SESSION_EXPIRED,
-                    AuthState.AuthorizationStatus.NOT_CHECKED,
-                    null
-            );
+            clearSession(AuthState.AuthenticationStatus.SESSION_EXPIRED);
             authenticationStatus = AuthState.AuthenticationStatus.SESSION_EXPIRED;
             authorizationStatus = AuthState.AuthorizationStatus.NOT_CHECKED;
         }
@@ -72,12 +89,20 @@ public final class SessionManager {
     }
 
     public synchronized void beginAuthentication() {
-        tokenManager.clear();
-        persistState(
-                AuthState.AuthenticationStatus.AUTHENTICATING,
-                AuthState.AuthorizationStatus.NOT_CHECKED,
-                null
-        );
+        synchronized (PROCESS_SESSION_LOCK) {
+            setProcessAuthenticationStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
+            try {
+                tokenManager.clear();
+                persistState(
+                        AuthState.AuthenticationStatus.AUTHENTICATING,
+                        AuthState.AuthorizationStatus.NOT_CHECKED,
+                        null
+                );
+            } catch (RuntimeException exception) {
+                clearProcessAuthenticationStatus();
+                throw exception;
+            }
+        }
     }
 
     public synchronized void completeAuthentication(
@@ -86,21 +111,25 @@ public final class SessionManager {
             String refreshToken,
             long expiresAtMillis
     ) {
-        requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
-        if (userId == null || userId.trim().isEmpty()) {
-            throw new IllegalArgumentException("User ID must not be blank");
-        }
+        synchronized (PROCESS_SESSION_LOCK) {
+            requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
+            if (userId == null || userId.trim().isEmpty()) {
+                throw new IllegalArgumentException("User ID must not be blank");
+            }
 
-        tokenManager.storeTokens(idToken, refreshToken, expiresAtMillis);
-        try {
-            persistState(
-                    AuthState.AuthenticationStatus.AUTHENTICATED,
-                    AuthState.AuthorizationStatus.NOT_CHECKED,
-                    userId
-            );
-        } catch (RuntimeException exception) {
-            tokenManager.clear();
-            throw exception;
+            tokenManager.storeTokens(idToken, refreshToken, expiresAtMillis);
+            try {
+                persistState(
+                        AuthState.AuthenticationStatus.AUTHENTICATED,
+                        AuthState.AuthorizationStatus.NOT_CHECKED,
+                        userId
+                );
+                setProcessAuthenticationStatus(AuthState.AuthenticationStatus.AUTHENTICATED);
+            } catch (RuntimeException exception) {
+                clearProcessAuthenticationStatus();
+                tokenManager.clear();
+                throw exception;
+            }
         }
     }
 
@@ -132,26 +161,34 @@ public final class SessionManager {
     }
 
     public synchronized void failAuthentication() {
-        requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
-        clearSession(AuthState.AuthenticationStatus.AUTH_FAILED);
+        synchronized (PROCESS_SESSION_LOCK) {
+            requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
+            clearSession(AuthState.AuthenticationStatus.AUTH_FAILED);
+        }
     }
 
     public synchronized void markNetworkError() {
-        requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
-        persistState(
-                AuthState.AuthenticationStatus.NETWORK_ERROR,
-                AuthState.AuthorizationStatus.NOT_CHECKED,
-                preferences.getString(KEY_USER_ID, null)
-        );
+        synchronized (PROCESS_SESSION_LOCK) {
+            requireStatus(AuthState.AuthenticationStatus.AUTHENTICATING);
+            clearProcessAuthenticationStatus();
+            persistState(
+                    AuthState.AuthenticationStatus.NETWORK_ERROR,
+                    AuthState.AuthorizationStatus.NOT_CHECKED,
+                    preferences.getString(KEY_USER_ID, null)
+            );
+        }
     }
 
     public synchronized void logout() {
-        tokenManager.clear();
-        persistState(
-                AuthState.AuthenticationStatus.SIGNED_OUT,
-                AuthState.AuthorizationStatus.NOT_CHECKED,
-                null
-        );
+        synchronized (PROCESS_SESSION_LOCK) {
+            clearProcessAuthenticationStatus();
+            tokenManager.clear();
+            persistState(
+                    AuthState.AuthenticationStatus.SIGNED_OUT,
+                    AuthState.AuthorizationStatus.NOT_CHECKED,
+                    null
+            );
+        }
     }
 
     public TokenManager getTokenManager() {
@@ -173,6 +210,7 @@ public final class SessionManager {
     }
 
     private void clearSession(AuthState.AuthenticationStatus nextStatus) {
+        clearProcessAuthenticationStatus();
         tokenManager.clear();
         persistState(
                 nextStatus,
@@ -197,6 +235,28 @@ public final class SessionManager {
 
         if (!editor.commit()) {
             throw new IllegalStateException("Unable to persist session state");
+        }
+    }
+
+    private boolean isProcessAuthenticationActive(
+            AuthState.AuthenticationStatus status
+    ) {
+        synchronized (PROCESS_SESSION_LOCK) {
+            return PROCESS_SESSIONS.get(appId) == status;
+        }
+    }
+
+    private void setProcessAuthenticationStatus(
+            AuthState.AuthenticationStatus status
+    ) {
+        synchronized (PROCESS_SESSION_LOCK) {
+            PROCESS_SESSIONS.put(appId, status);
+        }
+    }
+
+    private void clearProcessAuthenticationStatus() {
+        synchronized (PROCESS_SESSION_LOCK) {
+            PROCESS_SESSIONS.remove(appId);
         }
     }
 
