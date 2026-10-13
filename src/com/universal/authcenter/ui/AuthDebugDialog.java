@@ -152,21 +152,21 @@ public final class AuthDebugDialog extends Dialog implements AuthDebug.Listener 
         root.setPadding(dpToPx(20), dpToPx(24), dpToPx(20), dpToPx(24));
 
         TextView header = new TextView(getContext());
-        header.setText("AUTH DEBUG — TEMPORARY");
+        header.setText("DEBUG AUTENTIKASI");
         header.setTextSize(18f);
         header.setTypeface(Typeface.DEFAULT_BOLD);
         header.setTextColor(COLOR_ACCENT);
         root.addView(header, matchWrap());
 
         TextView subheader = new TextView(getContext());
-        subheader.setText("Sanitized snapshot — no tokens, UID, device ID, or passwords are shown.");
+        subheader.setText("Cuplikan data tersanitasi — nilai token, UID lengkap, ID perangkat, dan kata sandi tidak ditampilkan.");
         subheader.setTextSize(12f);
         subheader.setTextColor(COLOR_LABEL);
         subheader.setPadding(0, dpToPx(4), 0, dpToPx(12));
         root.addView(subheader, matchWrap());
 
         Button refreshButton = new Button(getContext());
-        refreshButton.setText("Refresh");
+        refreshButton.setText("Muat ulang");
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -180,7 +180,7 @@ public final class AuthDebugDialog extends Dialog implements AuthDebug.Listener 
         root.addView(rowsContainer, matchWrap());
 
         Button closeButton = new Button(getContext());
-        closeButton.setText("Close");
+        closeButton.setText("Tutup");
         closeButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -198,25 +198,25 @@ public final class AuthDebugDialog extends Dialog implements AuthDebug.Listener 
     private void render(LinearLayout container, AuthDebugSnapshot snapshot) {
         container.removeAllViews();
 
-        addRow(container, "Backend host", snapshot.getBackendHost(), false);
-        addRow(container, "Package name", snapshot.getPackageName(), false);
-        addRow(container, "App key", snapshot.getAppKeyMasked(), false);
-        addRow(container, "Config status", snapshot.getConfigStatus(), false);
-        addRow(container, "Firebase session", snapshot.getFirebaseSession(), false);
-        addRow(container, "UID (masked)", snapshot.getUidMasked(), false);
-        addRow(container, "ID token", snapshot.getIdToken(), false);
-        addRow(container, "Device identity", snapshot.getDeviceIdentity(), false);
-        addRow(container, "Last attempt", snapshot.getLastAttemptTime(), false);
-        addRow(container, "Last completed stage", snapshot.getLastCompletedStage(), false);
-        addRow(container, "Request status", snapshot.getRequestStatus(), false);
-        addRow(container, "HTTP status", snapshot.getHttpStatus(), false);
-        addRow(container, "Application status", snapshot.getApplicationStatus(), false);
-        addRow(container, "Server message", snapshot.getErrorMessage(), false);
-        addRow(container, "Response time", snapshot.getResponseTime(), false);
+        addRow(container, "Host backend", snapshot.getBackendHost(), false);
+        addRow(container, "Nama paket", snapshot.getPackageName(), false);
+        addRow(container, "Kunci aplikasi", snapshot.getAppKeyMasked(), false);
+        addRow(container, "Status konfigurasi", snapshot.getConfigStatus(), false);
+        addRow(container, "Sesi Firebase", snapshot.getFirebaseSession(), false);
+        addRow(container, "UID (disamarkan)", snapshot.getUidMasked(), false);
+        addRow(container, "Token ID", snapshot.getIdToken(), false);
+        addRow(container, "Identitas perangkat", snapshot.getDeviceIdentity(), false);
+        addRow(container, "Waktu percobaan terakhir", snapshot.getLastAttemptTime(), false);
+        addRow(container, "Tahap terakhir yang selesai", snapshot.getLastCompletedStage(), false);
+        addRow(container, "Status permintaan", snapshot.getRequestStatus(), false);
+        addRow(container, "Status HTTP", snapshot.getHttpStatus(), false);
+        addRow(container, "Status aplikasi", snapshot.getApplicationStatus(), false);
+        addRow(container, "Pesan server", snapshot.getErrorMessage(), false);
+        addRow(container, "Waktu respons", snapshot.getResponseTime(), false);
         addRow(
                 container,
-                "Exception category",
-                snapshot.getExceptionCategory(),
+                "Kategori pengecualian",
+                localizedValue(snapshot.getExceptionCategory()),
                 !AuthDebugSnapshot.NOT_AVAILABLE.equals(snapshot.getExceptionCategory())
         );
     }
@@ -233,7 +233,9 @@ public final class AuthDebugDialog extends Dialog implements AuthDebug.Listener 
         row.addView(labelView, matchWrap());
 
         TextView valueView = new TextView(getContext());
-        valueView.setText(value == null || value.isEmpty() ? AuthDebugSnapshot.UNKNOWN : value);
+        valueView.setText(localizedValue(
+                value == null || value.isEmpty() ? AuthDebugSnapshot.UNKNOWN : value
+        ));
         valueView.setTextSize(14f);
         valueView.setTextColor(isError ? COLOR_VALUE_ERROR : COLOR_VALUE);
         row.addView(valueView, matchWrap());
@@ -253,6 +255,199 @@ public final class AuthDebugDialog extends Dialog implements AuthDebug.Listener 
         card.addView(row);
         container.addView(card, matchWrap());
         container.addView(divider, matchWrap());
+    }
+
+    private String localizedValue(String value) {
+        if (value == null) {
+            return "BELUM DIKETAHUI";
+        }
+        switch (value) {
+            case AuthDebugSnapshot.UNKNOWN:
+                return "BELUM DIKETAHUI";
+            case AuthDebugSnapshot.NOT_AVAILABLE:
+                return "TIDAK TERSEDIA";
+            case "NOT CONFIGURED":
+                return "BELUM DIKONFIGURASI";
+            case "NOT STARTED":
+                return "BELUM DIMULAI";
+            case "IN PROGRESS":
+                return "SEDANG BERLANGSUNG";
+            case "COMPLETED":
+                return "SELESAI";
+            case "FAILED":
+                return "GAGAL";
+            case "NETWORK ERROR":
+                return "KESALAHAN JARINGAN";
+            case "LOADED":
+                return "DIMUAT";
+            case "authenticated":
+                return "terautentikasi";
+            case "not authenticated":
+                return "belum terautentikasi";
+            case "missing":
+                return "tidak ada";
+            case "present (valid)":
+                return "tersedia (valid)";
+            case "present (expired)":
+                return "tersedia (kedaluwarsa)";
+            case "NOT EVALUATED":
+                return "BELUM DIPERIKSA";
+            case "valid":
+                return "valid";
+            case "unavailable":
+                return "tidak tersedia";
+            case "HTTP_ERROR_BODY_UNAVAILABLE":
+                return "KESALAHAN HTTP (ISI RESPONS TIDAK TERSEDIA)";
+            case "CONFIG FAILED":
+                return "KONFIGURASI GAGAL";
+            case "CONFIG LOADED":
+                return "KONFIGURASI DIMUAT";
+            case "FIREBASE SESSION LOADED":
+                return "SESI FIREBASE DIMUAT";
+            case "AUTHORIZATION BLOCKED: AUTHENTICATION REQUIRED":
+                return "OTORISASI DIBLOKIR: AUTENTIKASI DIPERLUKAN";
+            case "ID TOKEN OBTAINED":
+                return "TOKEN ID DIPEROLEH";
+            case "DEVICE IDENTITY UNAVAILABLE":
+                return "IDENTITAS PERANGKAT TIDAK TERSEDIA";
+            case "DEVICE IDENTITY EVALUATED":
+                return "IDENTITAS PERANGKAT DIPERIKSA";
+            case "FIREBASE SIGN-IN BLOCKED":
+                return "PROSES MASUK FIREBASE DIBLOKIR";
+            case "FIREBASE SIGN-IN STARTED":
+                return "PROSES MASUK FIREBASE DIMULAI";
+            case "FIREBASE SIGN-IN FAILED":
+                return "PROSES MASUK FIREBASE GAGAL";
+            case "AUTHORIZATION REQUEST STARTED":
+                return "PERMINTAAN OTORISASI DIMULAI";
+            case "HTTP RESPONSE RECEIVED":
+                return "RESPONS HTTP DITERIMA";
+            case "RESPONSE PARSED":
+                return "RESPONS DIURAI";
+            case "AUTHORIZATION FAILED":
+                return "OTORISASI GAGAL";
+            case "FIREBASE SESSION UPDATE FAILED":
+                return "PEMBARUAN SESI FIREBASE GAGAL";
+            case "FIREBASE SIGN-IN REJECTED":
+                return "PROSES MASUK FIREBASE DITOLAK";
+            case "FIREBASE NETWORK ERROR":
+                return "KESALAHAN JARINGAN FIREBASE";
+            case "AUTHORIZED":
+                return "DIOTORISASI";
+            case "ACCESS_DENIED":
+                return "AKSES DITOLAK";
+            case "DEVICE_REJECTED":
+                return "PERANGKAT DITOLAK";
+            case "USER_DISABLED":
+                return "PENGGUNA DINONAKTIFKAN";
+            case "USER_EXPIRED":
+                return "MASA BERLAKU PENGGUNA HABIS";
+            case "UNKNOWN_APP":
+                return "APLIKASI TIDAK DIKENAL";
+            case "BAD_REQUEST":
+                return "PERMINTAAN TIDAK VALID";
+            case "UNAUTHENTICATED":
+                return "BELUM TERAUTENTIKASI";
+            case "INVALID_TOKEN":
+                return "TOKEN TIDAK VALID";
+            case "AUTHORIZATION_UNAVAILABLE":
+                return "LAYANAN OTORISASI TIDAK TERSEDIA";
+            case "INTERNAL_ERROR":
+                return "KESALAHAN INTERNAL";
+            case "METHOD_NOT_ALLOWED":
+                return "METODE TIDAK DIIZINKAN";
+            case "AUTHENTICATION_REQUIRED":
+                return "AUTENTIKASI DIPERLUKAN";
+            case "INVALID_CREDENTIALS":
+                return "KREDENSIAL TIDAK VALID";
+            case "ACCOUNT_DISABLED":
+                return "AKUN DINONAKTIFKAN";
+            case "SIGN_IN_DISABLED":
+                return "PROSES MASUK DINONAKTIFKAN";
+            case "RATE_LIMITED":
+                return "BATAS PERMINTAAN TERCAPAI";
+            case "HTTP_ERROR":
+                return "KESALAHAN HTTP";
+            case "INVALID_RESPONSE":
+                return "RESPONS TIDAK VALID";
+            case "INVALID_REQUEST":
+                return "PERMINTAAN TIDAK VALID";
+            case "CONFIGURATION_ERROR":
+                return "KESALAHAN KONFIGURASI";
+            case "SESSION_ERROR":
+                return "KESALAHAN SESI";
+            case "Access granted":
+                return "Akses diberikan";
+            case "Access denied":
+                return "Akses ditolak";
+            case "Unknown application":
+                return "Aplikasi tidak dikenal";
+            case "Authentication required":
+                return "Autentikasi diperlukan";
+            case "Invalid or expired token":
+                return "Token tidak valid atau kedaluwarsa";
+            case "Authorization service unavailable":
+                return "Layanan otorisasi tidak tersedia";
+            case "Internal server error":
+                return "Kesalahan internal server";
+            case "Method not allowed":
+                return "Metode tidak diizinkan";
+            case "A valid appKey is required":
+                return "appKey yang valid diperlukan";
+            case "A valid deviceId is required":
+                return "deviceId yang valid diperlukan";
+            case "Device identity is unavailable":
+                return "Identitas perangkat tidak tersedia";
+            case "UNRECOGNIZED MESSAGE (content suppressed)":
+                return "PESAN TIDAK DIKENALI (konten disembunyikan)";
+            case "AuthConfig is null":
+                return "AuthConfig tidak tersedia";
+            case "Invalid authorization configuration":
+                return "Konfigurasi otorisasi tidak valid";
+            case "FAILED (AuthConfig is null)":
+                return "GAGAL (AuthConfig tidak tersedia)";
+            case "FAILED (Invalid authorization configuration)":
+                return "GAGAL (konfigurasi otorisasi tidak valid)";
+            case "FAILED (reason suppressed)":
+                return "GAGAL (alasan disembunyikan)";
+            default:
+                if (value.startsWith("INCOMPLETE (missing ") && value.endsWith(")")) {
+                    return localizeMissingConfiguration(value);
+                }
+                if (value.startsWith("*** (len=") && value.endsWith(")")) {
+                    return value.replace("*** (len=", "*** (panjang=");
+                }
+                return value;
+        }
+    }
+
+    private String localizeMissingConfiguration(String value) {
+        String missing = value.substring("INCOMPLETE (missing ".length(), value.length() - 1);
+        String[] keys = missing.split(", ");
+        StringBuilder localized = new StringBuilder("TIDAK LENGKAP (kurang: ");
+        for (int index = 0; index < keys.length; index++) {
+            if (index > 0) {
+                localized.append(", ");
+            }
+            switch (keys[index]) {
+                case "backendHost":
+                    localized.append("host backend");
+                    break;
+                case "packageName":
+                    localized.append("nama paket");
+                    break;
+                case "appKey":
+                    localized.append("kunci aplikasi");
+                    break;
+                case "firebaseApiKey":
+                    localized.append("kunci API Firebase");
+                    break;
+                default:
+                    localized.append(keys[index]);
+                    break;
+            }
+        }
+        return localized.append(')').toString();
     }
 
     private LinearLayout.LayoutParams matchWrap() {
